@@ -87,11 +87,17 @@ jobs:
         run: |
           sudo chown -R $USER:$USER /var/www/pterodactyl/storage /var/www/pterodactyl/bootstrap/cache
           chmod -R 775 /var/www/pterodactyl/storage /var/www/pterodactyl/bootstrap/cache
-
       - name: Create Admin User
         run: |
           cd /var/www/pterodactyl
-          printf "%s\n%s\n%s\n%s\n" "${{ secrets.ADMIN_NAME }}" "${{ secrets.ADMIN_EMAIL }}" "${{ secrets.ADMIN_PASSWORD }}" "yes" | php artisan p:user:make
+          php artisan p:user:make \
+            --username="${{ secrets.ADMIN_USERNAME }}" \
+            --email="${{ secrets.ADMIN_EMAIL }}" \
+            --name-first="${{ secrets.ADMIN_FIRST_NAME }}" \
+            --name-last="${{ secrets.ADMIN_LAST_NAME }}" \
+            --password="${{ secrets.ADMIN_PASSWORD }}" \
+            --admin=1 \
+            --no-interaction
 
       - name: Disable Apache
         run: |
