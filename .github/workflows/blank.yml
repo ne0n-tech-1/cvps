@@ -3,7 +3,7 @@ name: Pterodactyl Auto Setup & Backup
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 */6 * * *" # every ~6 hours
+    - cron: "0 *12 * * *" # every 12 hours
 
 jobs:
   setup-and-backup:
@@ -22,12 +22,15 @@ jobs:
 
       - name: Restore backup if exists
         run: |
-          if [ -f backup/latest-backup.tar.gz ]; then
-            echo "Backup exists, restoring..."
-            sudo tar -xzf backup/latest-backup.tar.gz -C /
+          if [ -f latest-backup-url.txt ]; then
+            BACKUP_URL=$(cat latest-backup-url.txt)
+            echo "Found backup URL: $BACKUP_URL"
+            curl -L $BACKUP_URL -o latest-backup.tar.gz
+            sudo tar -xzf latest-backup.tar.gz -C /
+            echo "✅ Backup restored"
             exit 0
           else
-            echo "No backup found, proceeding with fresh install."
+            echo "No backup URL found, fresh install."
           fi
 
       - name: Install Tailscale
@@ -83,6 +86,7 @@ jobs:
           php artisan migrate --seed --force
           
           sudo chown -R www-data:www-data /var/www/pterodactyl
+
       - name: Create Admin User
         run: |
           cd /var/www/pterodactyl
@@ -123,11 +127,13 @@ jobs:
           sudo ln -sf /etc/nginx/sites-available/pterodactyl.conf /etc/nginx/sites-enabled/
           sudo nginx -t
           sudo systemctl restart nginx
+
       - name: Install PHP-FPM
         run: |
           sudo apt-get update
           sudo apt-get install -y php8.2-fpm php8.2-cli php8.2-mysql php8.2-mbstring php8.2-bcmath php8.2-curl php8.2-gd php8.2-xml
           sudo systemctl enable --now php8.2-fpm
+
       - name: Fix Nginx sites
         run: |
           sudo rm -f /etc/nginx/sites-enabled/default
@@ -135,38 +141,50 @@ jobs:
           sudo nginx -t
           sudo systemctl reload nginx
 
-      - name: Install Node1
-        run: |
-          sudo mkdir -p /etc/pterodactyl
-          cd /etc/pterodactyl
-          
-          # Download the Wings binary directly
-          sudo curl -Lo wings https://github.com/pterodactyl/wings/releases/latest/download/wings_linux_amd64
-          sudo chmod +x wings
-          echo "Node1 installed."
-
       - name: Start Cloudflare Tunnel
         run: |
           docker run -d cloudflare/cloudflared:latest tunnel --no-autoupdate run --token ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
 
       - name: Sleep before backup
-        run: sleep 21000
+        run: sleep 40500 # 11h 15m
 
       - name: Create Backup
         run: |
-          mkdir -p backup
-          sudo tar -czf backup/latest-backup.tar.gz \
+          BACKUP_FILE="pterodactyl-backup-$(date +%Y%m%d-%H%M).tar.gz"
+          sudo tar -czf $BACKUP_FILE \
             /var/www/pterodactyl \
             /etc/pterodactyl \
             /etc/nginx \
             /var/lib/mysql \
             /var/lib/redis \
             /var/lib/tailscale
+          echo "Backup created: $BACKUP_FILE"
+          echo "BACKUP_FILE=$BACKUP_FILE" >> $GITHUB_ENV
 
-      - name: Push Backup to Repo
+      - name: Upload Backup to transfer.sh
+        run: |
+          UPLOAD_URL=$(curl --upload-file $BACKUP_FILE https://transfer.sh/$BACKUP_FILE)
+          echo "✅ Backup uploaded: $UPLOAD_URL"
+          echo "BACKUP_URL=$UPLOAD_URL" >> $GITHUB_ENV
+      - name: Upload Backup to transfer.sh
+        run: |
+          BACKUP_FILE="pterodactyl-backup-$(date +%Y%m%d-%H%M).tar.gz"
+          sudo tar -czf $BACKUP_FILE \
+            /var/www/pterodactyl \
+            /etc/pterodactyl \
+            /etc/nginx \
+            /var/lib/mysql \
+            /var/lib/redis \
+            /var/lib/tailscale
+          UPLOAD_URL=$(curl --upload-file $BACKUP_FILE https://transfer.sh/$BACKUP_FILE)
+          echo "✅ Backup uploaded: $UPLOAD_URL"
+          echo $UPLOAD_URL > latest-backup-url.txt
+          echo "BACKUP_URL=$UPLOAD_URL" >> $GITHUB_ENV
+
+      - name: Save latest backup URL to repo
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
-          git add backup/latest-backup.tar.gz
-          git commit -m "Automated backup $(date)"
+          git add latest-backup-url.txt
+          git commit -m "Update latest backup URL $(date)"
           git push
