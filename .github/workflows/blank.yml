@@ -83,15 +83,19 @@ jobs:
           php artisan migrate --seed --force
           
           sudo chown -R www-data:www-data /var/www/pterodactyl
+      - name: Fix Permissions
+        run: |
+          sudo chown -R $USER:$USER /var/www/pterodactyl/storage /var/www/pterodactyl/bootstrap/cache
+          chmod -R 775 /var/www/pterodactyl/storage /var/www/pterodactyl/bootstrap/cache
+
       - name: Create Admin User
         run: |
           cd /var/www/pterodactyl
           php artisan p:user:make \
-            --name="${{ secrets.ADMIN_NAME }}" \
             --email="${{ secrets.ADMIN_EMAIL }}" \
             --password="${{ secrets.ADMIN_PASSWORD }}" \
             --admin=1 \
-            --no-interaction
+            "${{ secrets.ADMIN_NAME }}"
 
       - name: Disable Apache
         run: |
