@@ -39,11 +39,11 @@ jobs:
 
       - name: Install Pterodactyl Panel
         run: |
-          mkdir -p /var/www/pterodactyl
+          sudo mkdir -p /var/www/pterodactyl
           cd /var/www/pterodactyl
-          curl -Lo panel.tar.gz https://github.com/pterodactyl/panel/releases/latest/download/panel.tar.gz
-          tar -xzvf panel.tar.gz
-          cp .env.example .env
+          sudo curl -Lo panel.tar.gz https://github.com/pterodactyl/panel/releases/latest/download/panel.tar.gz
+          sudo tar -xzvf panel.tar.gz
+          sudo cp .env.example .env
           composer install --no-dev --optimize-autoloader
           php artisan key:generate
           php artisan migrate --seed --force
@@ -74,12 +74,11 @@ jobs:
 
       - name: Install Node1
         run: |
-          mkdir -p /etc/pterodactyl
+          sudo mkdir -p /etc/pterodactyl
           cd /etc/pterodactyl
-          curl -Lo wings.tar.gz https://github.com/pterodactyl/wings/releases/latest/download/wings_linux_amd64.tar.gz
-          tar -xzvf wings.tar.gz
+          sudo curl -Lo wings.tar.gz https://github.com/pterodactyl/wings/releases/latest/download/wings_linux_amd64.tar.gz
+          sudo tar -xzvf wings.tar.gz
           echo "Node1 installed."
-
       - name: Start Node2 (separate VM)
         run: |
           # This simulates second node. In real setup you'd provision another VM.
@@ -96,14 +95,13 @@ jobs:
       - name: Create Backup
         run: |
           mkdir -p backup
-          tar -czf backup/latest-backup.tar.gz \
+          sudo tar -czf backup/latest-backup.tar.gz \
             /var/www/pterodactyl \
             /etc/pterodactyl \
             /etc/nginx \
             /var/lib/mysql \
             /var/lib/redis \
             /var/lib/tailscale
-          echo "Backup complete."
 
       - name: Push Backup to Repo
         run: |
