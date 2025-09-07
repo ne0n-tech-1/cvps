@@ -117,11 +117,6 @@ jobs:
           sudo chmod +x wings
           echo "Node1 installed."
 
-      - name: Start Node2 (separate VM)
-        run: |
-          mkdir -p /etc/pterodactyl/node2
-          echo "Node2 installed."
-
       - name: Start Cloudflare Tunnel
         run: |
           docker run -d cloudflare/cloudflared:latest tunnel --no-autoupdate run --token ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
