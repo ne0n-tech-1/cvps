@@ -140,8 +140,8 @@ jobs:
 
       - name: Install Node1 and register to Panel
         run: |
-          sudo mkdir -p /etc/pterodactyl/node1
-          cd /etc/pterodactyl/node1
+          sudo mkdir -p /opt/pterodactyl/node1
+          cd /opt/pterodactyl/node1
 
           # Download Wings binary
           sudo curl -Lo wings https://github.com/pterodactyl/wings/releases/latest/download/wings_linux_amd64
