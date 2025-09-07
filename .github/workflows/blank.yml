@@ -41,24 +41,25 @@ jobs:
           sudo mkdir -p /var/www/pterodactyl
           cd /var/www/pterodactyl
           
-          # Download and extract as root
+          # Download and extract release
           sudo curl -Lo panel.tar.gz https://github.com/pterodactyl/panel/releases/latest/download/panel.tar.gz
-          sudo tar -xzvf panel.tar.gz --strip-components=1
+          sudo tar -xzvf panel.tar.gz
           
-          # Fix permissions so composer can write
+          # Fix ownership so runner user can work
           sudo chown -R $USER:$USER /var/www/pterodactyl
           mkdir -p vendor
           
+          # Copy env example
           cp .env.example .env
           
-          # Run composer as the runner user
+          # Install dependencies
           composer install --no-dev --optimize-autoloader
           
-          # Run artisan tasks
+          # Laravel setup
           php artisan key:generate
           php artisan migrate --seed --force
           
-          # Give back ownership to webserver
+          # Reset permissions for webserver
           sudo chown -R www-data:www-data /var/www/pterodactyl
 
       - name: Configure Nginx for Panel
