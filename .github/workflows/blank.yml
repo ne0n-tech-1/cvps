@@ -112,6 +112,11 @@ jobs:
           sudo ln -sf /etc/nginx/sites-available/pterodactyl.conf /etc/nginx/sites-enabled/
           sudo nginx -t
           sudo systemctl restart nginx
+      - name: Install PHP-FPM
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y php8.2-fpm php8.2-cli php8.2-mysql php8.2-mbstring php8.2-bcmath php8.2-curl php8.2-gd php8.2-xml
+          sudo systemctl enable --now php8.2-fpm
       - name: Fix Nginx sites
         run: |
           sudo rm -f /etc/nginx/sites-enabled/default
