@@ -36,6 +36,18 @@ jobs:
           sudo tailscale up --authkey ${{ secrets.TAILSCALE_KEY }} --hostname=ptero-panel --advertise-routes=10.0.0.0/24 --accept-routes
           sudo tailscale ip -4 > panel-ip.txt
           echo "Panel IP: $(cat panel-ip.txt)"
+      - name: Install PHP 8.2
+        run: |
+          sudo add-apt-repository ppa:ondrej/php -y
+          sudo apt-get update
+          sudo apt-get install -y php8.2 php8.2-cli php8.2-common php8.2-mysql \
+            php8.2-pgsql php8.2-sqlite3 php8.2-redis php8.2-mbstring php8.2-xml \
+            php8.2-bcmath php8.2-gd php8.2-curl unzip curl git \
+            php8.2-zip composer
+          
+          # Ensure php8.2 is default
+          sudo update-alternatives --set php /usr/bin/php8.2
+          php -v
       - name: Install Pterodactyl Panel
         run: |
           sudo mkdir -p /var/www/pterodactyl
