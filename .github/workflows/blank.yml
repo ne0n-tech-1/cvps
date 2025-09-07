@@ -84,6 +84,12 @@ jobs:
           
           sudo chown -R www-data:www-data /var/www/pterodactyl
 
+      - name: Disable Apache
+        run: |
+          sudo systemctl stop apache2 || true
+          sudo systemctl disable apache2 || true
+          sudo systemctl mask apache2 || true
+
       - name: Configure Nginx for Panel
         run: |
           cat <<EOF | sudo tee /etc/nginx/sites-available/pterodactyl.conf
