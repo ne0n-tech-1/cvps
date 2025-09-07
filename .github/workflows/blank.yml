@@ -111,8 +111,10 @@ jobs:
         run: |
           sudo mkdir -p /etc/pterodactyl
           cd /etc/pterodactyl
-          sudo curl -Lo wings.tar.gz https://github.com/pterodactyl/wings/releases/latest/download/wings_linux_amd64.tar.gz
-          sudo tar -xzvf wings.tar.gz
+          
+          # Download the Wings binary directly
+          sudo curl -Lo wings https://github.com/pterodactyl/wings/releases/latest/download/wings_linux_amd64
+          sudo chmod +x wings
           echo "Node1 installed."
 
       - name: Start Node2 (separate VM)
