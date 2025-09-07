@@ -91,11 +91,7 @@ jobs:
       - name: Create Admin User
         run: |
           cd /var/www/pterodactyl
-          php artisan p:user:make \
-            --email="${{ secrets.ADMIN_EMAIL }}" \
-            --password="${{ secrets.ADMIN_PASSWORD }}" \
-            --admin=1 \
-            "${{ secrets.ADMIN_NAME }}"
+          printf "%s\n%s\n%s\n%s\n" "${{ secrets.ADMIN_NAME }}" "${{ secrets.ADMIN_EMAIL }}" "${{ secrets.ADMIN_PASSWORD }}" "yes" | php artisan p:user:make
 
       - name: Disable Apache
         run: |
