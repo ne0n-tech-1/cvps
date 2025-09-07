@@ -3,7 +3,7 @@ name: Pterodactyl Auto Setup & Backup
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 */12 * * *" # every 12 hours
+    - cron: "0 */6 * * *" # every 12 hours
 
 jobs:
   setup-and-backup:
@@ -146,7 +146,7 @@ jobs:
           docker run -d cloudflare/cloudflared:latest tunnel --no-autoupdate run --token ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
 
       - name: Sleep before backup
-        run: sleep 40500 # 11h 15m
+        run: sleep 20900 # 11h 15m
 
       - name: Create Backup
         run: |
