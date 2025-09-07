@@ -23,11 +23,11 @@ jobs:
       - name: Restore backup if exists
         run: |
           if [ -f backup/latest-backup.tar.gz ]; then
-            echo "Backup exists, skipping installation."
-            tar -xzf backup/latest-backup.tar.gz -C /
+            echo "Backup exists, restoring..."
+            sudo tar -xzf backup/latest-backup.tar.gz -C /
             exit 0
           else
-            echo "No backup found, proceeding with installation."
+            echo "No backup found, proceeding with fresh install."
           fi
 
       - name: Install Tailscale
@@ -36,6 +36,7 @@ jobs:
           sudo tailscale up --authkey ${{ secrets.TAILSCALE_KEY }} --hostname=ptero-panel --advertise-routes=10.0.0.0/24 --accept-routes
           sudo tailscale ip -4 > panel-ip.txt
           echo "Panel IP: $(cat panel-ip.txt)"
+
       - name: Install PHP 8.2
         run: |
           sudo add-apt-repository ppa:ondrej/php -y
@@ -45,9 +46,17 @@ jobs:
             php8.2-bcmath php8.2-gd php8.2-curl unzip curl git \
             php8.2-zip composer
           
-          # Ensure php8.2 is default
           sudo update-alternatives --set php /usr/bin/php8.2
           php -v
+
+      - name: Setup MySQL for Pterodactyl
+        run: |
+          sudo systemctl start mysql
+          sudo mysql -u root -e "CREATE DATABASE IF NOT EXISTS panel;"
+          sudo mysql -u root -e "CREATE USER IF NOT EXISTS 'pterodactyl'@'localhost' IDENTIFIED BY 'StrongPassword123!';"
+          sudo mysql -u root -e "GRANT ALL PRIVILEGES ON panel.* TO 'pterodactyl'@'localhost';"
+          sudo mysql -u root -e "FLUSH PRIVILEGES;"
+
       - name: Install Pterodactyl Panel
         run: |
           sudo mkdir -p /var/www/pterodactyl
@@ -57,21 +66,22 @@ jobs:
           sudo curl -Lo panel.tar.gz https://github.com/pterodactyl/panel/releases/latest/download/panel.tar.gz
           sudo tar -xzvf panel.tar.gz
           
-          # Fix ownership so runner user can work
           sudo chown -R $USER:$USER /var/www/pterodactyl
-          mkdir -p vendor
           
-          # Copy env example
+          # Copy env
           cp .env.example .env
-          
-          # Install dependencies
+          sed -i 's/DB_CONNECTION=mysql/DB_CONNECTION=mysql/' .env
+          sed -i 's/DB_HOST=127.0.0.1/DB_HOST=127.0.0.1/' .env
+          sed -i 's/DB_PORT=3306/DB_PORT=3306/' .env
+          sed -i 's/DB_DATABASE=panel/DB_DATABASE=panel/' .env
+          sed -i 's/DB_USERNAME=root/DB_USERNAME=pterodactyl/' .env
+          sed -i 's/DB_PASSWORD=/DB_PASSWORD=StrongPassword123!/' .env
+
+          # Composer + Laravel setup
           composer install --no-dev --optimize-autoloader
-          
-          # Laravel setup
-          php artisan key:generate
+          php artisan key:generate --force
           php artisan migrate --seed --force
           
-          # Reset permissions for webserver
           sudo chown -R www-data:www-data /var/www/pterodactyl
 
       - name: Configure Nginx for Panel
@@ -87,13 +97,13 @@ jobs:
               }
               location ~ \.php\$ {
                   include snippets/fastcgi-php.conf;
-                  fastcgi_pass unix:/var/run/php/php7.4-fpm.sock;
+                  fastcgi_pass unix:/var/run/php/php8.2-fpm.sock;
                   fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
                   include fastcgi_params;
               }
           }
           EOF
-          sudo ln -s /etc/nginx/sites-available/pterodactyl.conf /etc/nginx/sites-enabled/
+          sudo ln -sf /etc/nginx/sites-available/pterodactyl.conf /etc/nginx/sites-enabled/
           sudo nginx -t
           sudo systemctl restart nginx
 
@@ -104,9 +114,9 @@ jobs:
           sudo curl -Lo wings.tar.gz https://github.com/pterodactyl/wings/releases/latest/download/wings_linux_amd64.tar.gz
           sudo tar -xzvf wings.tar.gz
           echo "Node1 installed."
+
       - name: Start Node2 (separate VM)
         run: |
-          # This simulates second node. In real setup you'd provision another VM.
           mkdir -p /etc/pterodactyl/node2
           echo "Node2 installed."
 
