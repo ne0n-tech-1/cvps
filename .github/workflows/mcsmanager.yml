@@ -1,0 +1,86 @@
+name: MCSManager
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 */6 * * *" # every ~6 hours
+
+jobs:
+  setup-and-backup:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl wget unzip tar git nodejs npm docker.io
+
+      - name: Restore backup if exists
+        run: |
+          if [ -f backup/last_backup_url.txt ]; then
+            echo "Backup URL found, downloading..."
+            url=$(cat backup/last_backup_url.txt)
+            curl -sL $url -o /tmp/backup.tar.gz
+            sudo tar -xzf /tmp/backup.tar.gz -C /
+            echo "Backup restored."
+            exit 0
+          else
+            echo "No backup URL found, proceeding with fresh install."
+          fi
+
+      - name: Install Tailscale
+        run: |
+          curl -fsSL https://tailscale.com/install.sh | sh
+          sudo tailscale up --authkey ${{ secrets.TAILSCALE_KEY }} --hostname=mcsmanager-panel
+          sudo tailscale ip -4 > panel-ip.txt
+          echo "Panel IP: $(cat panel-ip.txt)"
+
+      - name: Install MCSManager
+        run: |
+          sudo mkdir -p /opt/mcsmanager
+          cd /opt/mcsmanager
+
+          if [ ! -d "MCSManager-Web-Release" ]; then
+            sudo git clone https://github.com/MCSManager/MCSManager-Web-Release.git
+          fi
+          if [ ! -d "MCSManager-Core-Release" ]; then
+            sudo git clone https://github.com/MCSManager/MCSManager-Core-Release.git
+          fi
+
+          cd MCSManager-Web-Release && sudo npm install
+          cd ../MCSManager-Core-Release && sudo npm install
+
+          # start MCSManager processes
+          nohup node /opt/mcsmanager/MCSManager-Web-Release/app.js > /opt/mcsmanager/web.log 2>&1 &
+          nohup node /opt/mcsmanager/MCSManager-Core-Release/app.js > /opt/mcsmanager/core.log 2>&1 &
+
+      - name: Start Cloudflare Tunnel
+        run: |
+          docker run -d cloudflare/cloudflared:latest tunnel --no-autoupdate run --token ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
+
+      - name: Sleep before backup
+        run: sleep 20700 # ~5h45m
+
+      - name: Create Backup
+        run: |
+          mkdir -p backup
+          sudo tar -czf backup/latest-backup.tar.gz \
+            /opt/mcsmanager \
+            /var/lib/tailscale
+
+      - name: Upload Backup to transfer.sh
+        run: |
+          url=$(curl --upload-file backup/latest-backup.tar.gz https://transfer.sh/latest-backup.tar.gz)
+          echo "Backup URL: $url"
+          echo $url > backup/last_backup_url.txt
+
+      - name: Push Backup URL to Repo
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "actions@github.com"
+          git add backup/last_backup_url.txt
+          git commit -m "Updated backup URL $(date)"
+          git push
