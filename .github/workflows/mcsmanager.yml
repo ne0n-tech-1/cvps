@@ -1,72 +1,106 @@
-name: MCSManager Auto Setup & Backup
+name: MCSManager with Backup & Restore
 
 on:
+  push:
+    branches: [ main ]
   workflow_dispatch:
   schedule:
-    - cron: "0 */6 * * *" # every ~6 hours
+    - cron: "*/345 * * * *" # Every 5h45m
 
 jobs:
-  setup-and-backup:
-    runs-on: ubuntu-22.04
+  setup:
+    runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
+      - name: Checkout repository
         uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl wget tar unzip
 
       - name: Install Tailscale
         run: |
           curl -fsSL https://tailscale.com/install.sh | sh
-          sudo tailscale up --authkey ${{ secrets.TAILSCALE_KEY }} --hostname=mcsmanager-panel
-          sudo tailscale ip -4 > panel-ip.txt
-          echo "Panel IP: $(cat panel-ip.txt)"
+          sudo tailscaled --tun=userspace-networking --socks5-server=localhost:1055 &
+          sudo tailscale up --authkey=${{ secrets.TAILSCALE_AUTHKEY }} --hostname=mcsmanager-runner
 
-      - name: Restore backup if exists
-        run: |
-          if [ -f backup/last_backup_url.txt ]; then
-            echo "Backup URL found, downloading..."
-            url=$(cat backup/last_backup_url.txt)
-            curl -sL $url -o /tmp/backup.tar.gz
-            sudo tar -xzf /tmp/backup.tar.gz -C /
-            echo "Backup restored."
-            # Start services from restored install
-            sudo systemctl start mcsmanager-web
-            sudo systemctl start mcsmanager-daemon
-            exit 0
-          else
-            echo "No backup URL found, proceeding with fresh install."
-          fi
-
-      - name: Install MCSManager (fresh)
+      - name: Install MCSManager
         run: |
           sudo su -c "wget -qO- https://script.mcsmanager.com/setup.sh | bash"
-          sudo systemctl start mcsmanager-web
-          sudo systemctl start mcsmanager-daemon
 
-      - name: Start Cloudflare Tunnel
+      - name: Create systemd services
         run: |
-          docker run -d cloudflare/cloudflared:latest tunnel --no-autoupdate run --token ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
+          # Web Service
+          sudo tee /etc/systemd/system/mcsm-web.service > /dev/null <<EOF
+          [Unit]
+          Description=MCSManager Web Panel
+          After=network.target
 
-      - name: Sleep before backup
-        run: sleep 20700 # ~5h45m
+          [Service]
+          WorkingDirectory=/opt/mcsmanager/web
+          ExecStart=/usr/bin/node app.js
+          Restart=always
+          User=root
+          Environment=PATH=/usr/bin:/usr/local/bin
+          Environment=NODE_ENV=production
 
-      - name: Create Backup
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+
+          # Daemon Service
+          sudo tee /etc/systemd/system/mcsm-daemon.service > /dev/null <<EOF
+          [Unit]
+          Description=MCSManager Daemon
+          After=network.target
+
+          [Service]
+          WorkingDirectory=/opt/mcsmanager/daemon
+          ExecStart=/usr/bin/node app.js
+          Restart=always
+          User=root
+          Environment=PATH=/usr/bin:/usr/local/bin
+          Environment=NODE_ENV=production
+
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+
+          sudo systemctl daemon-reload
+          sudo systemctl enable mcsm-web mcsm-daemon
+          sudo systemctl start mcsm-web mcsm-daemon
+
+      - name: Setup Cloudflare Tunnel
         run: |
-          mkdir -p backup
-          sudo tar -czf backup/latest-backup.tar.gz \
-            /opt/mcsmanager \
-            /etc/systemd/system/mcsmanager* \
-            /var/lib/tailscale
+          curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o cloudflared
+          chmod +x cloudflared
+          sudo mv cloudflared /usr/local/bin/
+          cloudflared tunnel --no-autoupdate run --token ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }} &
 
-      - name: Upload Backup to transfer.sh
+      - name: Restore Backup (if exists)
         run: |
-          url=$(curl --upload-file backup/latest-backup.tar.gz https://transfer.sh/latest-backup.tar.gz)
-          echo "Backup URL: $url"
-          echo $url > backup/last_backup_url.txt
+          if [ -f backup_url.txt ]; then
+            URL=$(cat backup_url.txt)
+            echo "Restoring from $URL"
+            curl -sL $URL -o backup.tar.gz
+            sudo systemctl stop mcsm-web mcsm-daemon || true
+            sudo tar -xzf backup.tar.gz -C /
+            sudo systemctl start mcsm-web mcsm-daemon
+          fi
 
-      - name: Push Backup URL to Repo
+      - name: Create and Upload Backup
         run: |
-          git config --global user.name "github-actions"
-          git config --global user.email "actions@github.com"
-          git add backup/last_backup_url.txt
-          git commit -m "Updated backup URL $(date)"
+          BACKUP_FILE="mcsm-backup-$(date +%Y%m%d-%H%M).tar.gz"
+          sudo tar -czf $BACKUP_FILE /opt/mcsmanager
+          URL=$(curl --upload-file ./$BACKUP_FILE https://transfer.sh/$BACKUP_FILE)
+          echo $URL > backup_url.txt
+
+      - name: Commit backup URL
+        run: |
+          git config --global user.email "github-actions@github.com"
+          git config --global user.name "GitHub Actions"
+          git add backup_url.txt
+          git commit -m "Update backup URL" || echo "No changes to commit"
           git push
