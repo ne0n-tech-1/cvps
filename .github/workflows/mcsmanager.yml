@@ -1,4 +1,4 @@
-name: MCSManager
+name: MCSManager Auto Setup & Backup
 
 on:
   workflow_dispatch:
@@ -13,10 +13,12 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v3
 
-      - name: Install dependencies
+      - name: Install Tailscale
         run: |
-          sudo apt-get update
-          sudo apt-get install -y curl wget unzip tar git nodejs npm docker.io
+          curl -fsSL https://tailscale.com/install.sh | sh
+          sudo tailscale up --authkey ${{ secrets.TAILSCALE_KEY }} --hostname=mcsmanager-panel
+          sudo tailscale ip -4 > panel-ip.txt
+          echo "Panel IP: $(cat panel-ip.txt)"
 
       - name: Restore backup if exists
         run: |
@@ -26,36 +28,19 @@ jobs:
             curl -sL $url -o /tmp/backup.tar.gz
             sudo tar -xzf /tmp/backup.tar.gz -C /
             echo "Backup restored."
+            # Start services from restored install
+            sudo systemctl start mcsmanager-web
+            sudo systemctl start mcsmanager-daemon
             exit 0
           else
             echo "No backup URL found, proceeding with fresh install."
           fi
 
-      - name: Install Tailscale
+      - name: Install MCSManager (fresh)
         run: |
-          curl -fsSL https://tailscale.com/install.sh | sh
-          sudo tailscale up --authkey ${{ secrets.TAILSCALE_KEY }} --hostname=mcsmanager-panel
-          sudo tailscale ip -4 > panel-ip.txt
-          echo "Panel IP: $(cat panel-ip.txt)"
-
-      - name: Install MCSManager
-        run: |
-          sudo mkdir -p /opt/mcsmanager
-          cd /opt/mcsmanager
-
-          if [ ! -d "MCSManager-Web-Release" ]; then
-            sudo git clone https://github.com/MCSManager/MCSManager-Web-Release.git
-          fi
-          if [ ! -d "MCSManager-Core-Release" ]; then
-            sudo git clone https://github.com/MCSManager/MCSManager-Core-Release.git
-          fi
-
-          cd MCSManager-Web-Release && sudo npm install
-          cd ../MCSManager-Core-Release && sudo npm install
-
-          # start MCSManager processes
-          nohup node /opt/mcsmanager/MCSManager-Web-Release/app.js > /opt/mcsmanager/web.log 2>&1 &
-          nohup node /opt/mcsmanager/MCSManager-Core-Release/app.js > /opt/mcsmanager/core.log 2>&1 &
+          sudo su -c "wget -qO- https://script.mcsmanager.com/setup.sh | bash"
+          sudo systemctl start mcsmanager-web
+          sudo systemctl start mcsmanager-daemon
 
       - name: Start Cloudflare Tunnel
         run: |
@@ -69,6 +54,7 @@ jobs:
           mkdir -p backup
           sudo tar -czf backup/latest-backup.tar.gz \
             /opt/mcsmanager \
+            /etc/systemd/system/mcsmanager* \
             /var/lib/tailscale
 
       - name: Upload Backup to transfer.sh
