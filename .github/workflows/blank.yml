@@ -43,7 +43,7 @@ jobs:
             --hostname=ptero-panel \
             --advertise-routes=100.256.128.50/32 \
             --accept-routes
-          echo "Panel IP: 100.256.128.50"
+          echo "Panel IP: 100.128.128.50"
 
       - name: Install PHP 8.2 + Extensions
         run: |
