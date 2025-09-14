@@ -137,40 +137,7 @@ jobs:
           sudo ln -sf /etc/nginx/sites-available/pterodactyl.conf /etc/nginx/sites-enabled/pterodactyl.conf
           sudo nginx -t
           sudo systemctl reload nginx
-
-      - name: Install Node1 and register to Panel
-        run: |
-          sudo mkdir -p /opt/pterodactyl/node1
-          cd /opt/pterodactyl/node1
-
-          # Download Wings binary
-          sudo curl -Lo wings https://github.com/pterodactyl/wings/releases/latest/download/wings_linux_amd64
-          sudo chmod +x wings
-
-          # Generate Node API key
-          PANEL_KEY=$(cd /var/www/pterodactyl && php artisan p:api-key --name "Node1Key" --no-interaction --plain)
-          echo "Node API Key generated: $PANEL_KEY"
-
-          # Create Wings config
-          cat <<EOF | sudo tee /etc/pterodactyl/node1/config.yml
-          panel:
-            url: http://127.0.0.1
-            api_key: "$PANEL_KEY"
-          node:
-            name: "Node1"
-            description: "Automated Node1"
-            location: "Remote"
-            fqdn: "127.0.0.1"
-            scheme: "http"
-          system:
-            data: "/var/lib/pterodactyl/volumes"
-            sftp:
-              bind_port: 2022
-          EOF
-
-          # Start Wings
-          sudo ./wings &
-
+          
       - name: Start Cloudflare Tunnel
         run: |
           docker run -d cloudflare/cloudflared:latest tunnel --no-autoupdate run --token ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
