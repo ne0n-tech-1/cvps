@@ -39,9 +39,12 @@ jobs:
       - name: Install Tailscale
         run: |
           curl -fsSL https://tailscale.com/install.sh | sh
-          sudo tailscale up --authkey ${{ secrets.TAILSCALE_KEY }} --hostname=ptero-panel --advertise-routes=10.0.0.0/24 --accept-routes
-          sudo tailscale ip -4 > panel-ip.txt
-          echo "Panel IP: $(cat panel-ip.txt)"
+          # Fixed private IP (change if you prefer another one)
+          sudo tailscale up --authkey ${{ secrets.TAILSCALE_KEY }} \
+            --hostname=ptero-panel \
+            --advertise-routes=100.100.100.50/32 \
+            --accept-routes
+          echo "Panel fixed IP: 100.100.100.50"
 
       - name: Install PHP 8.2
         run: |
@@ -68,13 +71,11 @@ jobs:
           sudo mkdir -p /var/www/pterodactyl
           cd /var/www/pterodactyl
           
-          # Download and extract release
           sudo curl -Lo panel.tar.gz https://github.com/pterodactyl/panel/releases/latest/download/panel.tar.gz
           sudo tar -xzvf panel.tar.gz
           
           sudo chown -R $USER:$USER /var/www/pterodactyl
           
-          # Copy env
           cp .env.example .env
           sed -i 's/DB_CONNECTION=mysql/DB_CONNECTION=mysql/' .env
           sed -i 's/DB_HOST=127.0.0.1/DB_HOST=127.0.0.1/' .env
@@ -83,7 +84,6 @@ jobs:
           sed -i 's/DB_USERNAME=root/DB_USERNAME=pterodactyl/' .env
           sed -i 's/DB_PASSWORD=/DB_PASSWORD=StrongPassword123!/' .env
 
-          # Composer + Laravel setup
           composer install --no-dev --optimize-autoloader
           php artisan key:generate --force
           php artisan migrate --seed --force
@@ -154,7 +154,6 @@ jobs:
       - name: Create Backup and Upload to temp.sh
         run: |
           mkdir -p backup
-          TIMESTAMP=$(date +"%Y%m%d-%H%M")
           BACKUP_NAME="latest-backup.tar.gz"
 
           echo "📦 Creating backup..."
@@ -175,3 +174,10 @@ jobs:
             URL=$(curl -s -T "$f" https://temp.sh)
             echo "$URL" | tee -a backup/latest-backup-urls.txt
           done
+
+      - name: Logout from Tailscale
+        if: always()
+        run: |
+          sudo tailscale down || true
+          sudo tailscale logout || true
+          echo "👋 Logged out of Tailscale"
