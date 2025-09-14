@@ -35,15 +35,6 @@ jobs:
             echo "No backup found, proceeding with fresh install."
           fi
 
-      - name: Install Tailscale
-        run: |
-          curl -fsSL https://tailscale.com/install.sh | sh
-          # Fixed private IP (change if you prefer another one)
-          sudo tailscale up --authkey ${{ secrets.TAILSCALE_KEY }} --hostname=neon-panel
-          TS_IP=$(tailscale ip -4)
-          echo "Dynamic Tailscale IP: $TS_IP"
-          echo $TS_IP > panel-ip.txt
-
       - name: Install PHP 8.2 + Extensions
         run: |
           sudo add-apt-repository ppa:ondrej/php -y
@@ -136,13 +127,17 @@ jobs:
           sudo ln -sf /etc/nginx/sites-available/pterodactyl.conf /etc/nginx/sites-enabled/pterodactyl.conf
           sudo nginx -t
           sudo systemctl reload nginx
-          
+
+      - name: Restore Cloudflare Tunnel from Backup
+        run: |
+          sudo mkdir -p /etc/cloudflared
+          sudo cp backup/config.yml /etc/cloudflared/config.yml
+          sudo cp backup/*.json /root/.cloudflared/
+          sudo chmod 600 /root/.cloudflared/*.json
+
       - name: Start Cloudflare Tunnel
         run: |
-          docker run -d --name cloudflared \
-            -e TUNNEL_TOKEN=${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }} \
-            cloudflare/cloudflared:latest tunnel --no-autoupdate run \
-            --url http://$(cat panel-ip.txt):80
+          sudo cloudflared tunnel run ptero-panel &
 
       - name: Sleep before backup
         run: sleep 21100
@@ -162,6 +157,7 @@ jobs:
                    /etc/nginx \
                    /var/lib/mysql \
                    /var/lib/redis \
+                   /etc/cloudflared \
                    | split -b 5500M - backup/${BACKUP_NAME}.part-
 
           echo "⬆️ Uploading to temp.sh..."
@@ -170,10 +166,3 @@ jobs:
             URL=$(curl -s -T "$f" https://temp.sh)
             echo "$URL" | tee -a backup/latest-backup-urls.txt
           done
-
-      - name: Logout from Tailscale
-        if: always()
-        run: |
-          sudo tailscale down || true
-          sudo tailscale logout --force || true
-          echo "👋 Logged out of Tailscale"
