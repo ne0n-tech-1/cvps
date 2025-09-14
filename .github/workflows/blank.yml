@@ -39,11 +39,10 @@ jobs:
         run: |
           curl -fsSL https://tailscale.com/install.sh | sh
           # Fixed private IP (change if you prefer another one)
-          sudo tailscale up --authkey ${{ secrets.TAILSCALE_KEY }} \
-            --hostname=ptero-panel \
-            --advertise-routes=100.122.45.253/32 \
-            --accept-routes
-          sudo tailscale ip
+          sudo tailscale up --authkey ${{ secrets.TAILSCALE_KEY }} --hostname=neon-panel
+          TS_IP=$(tailscale ip -4)
+          echo "Dynamic Tailscale IP: $TS_IP"
+          echo $TS_IP > panel-ip.txt
 
       - name: Install PHP 8.2 + Extensions
         run: |
@@ -140,7 +139,10 @@ jobs:
           
       - name: Start Cloudflare Tunnel
         run: |
-          docker run -d cloudflare/cloudflared:latest tunnel --no-autoupdate run --token ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
+          docker run -d --name cloudflared \
+            -e TUNNEL_TOKEN=${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }} \
+            cloudflare/cloudflared:latest tunnel --no-autoupdate run \
+            --url http://$(cat panel-ip.txt):80
 
       - name: Sleep before backup
         run: sleep 21100
