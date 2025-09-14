@@ -41,9 +41,9 @@ jobs:
           # Fixed private IP (change if you prefer another one)
           sudo tailscale up --authkey ${{ secrets.TAILSCALE_KEY }} \
             --hostname=ptero-panel \
-            --advertise-routes=100.128.128.96/32 \
+            --advertise-routes=100.122.45.253/32 \
             --accept-routes
-          echo "Panel IP: 100.128.128.96"
+          sudo tailscale ip
 
       - name: Install PHP 8.2 + Extensions
         run: |
