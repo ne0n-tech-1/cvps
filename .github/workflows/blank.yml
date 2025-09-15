@@ -145,26 +145,20 @@ jobs:
           TUNNEL_NAME="ptero-panel"
           TUNNEL_DOMAIN="panel.neonhost.tech"
           CREDENTIALS_FILE="/root/.cloudflared/${TUNNEL_NAME}.json"
-          TS_IP=$(cat panel-ip.txt)
 
-          # Write config.yml pointing to the Tailscale IP
-          cat > /etc/cloudflared/config.yml <<EOF
+          # write as root
+          sudo tee /etc/cloudflared/config.yml > /dev/null <<EOF
           tunnel: ${TUNNEL_NAME}
           credentials-file: ${CREDENTIALS_FILE}
 
           ingress:
             - hostname: ${TUNNEL_DOMAIN}
-              service: http://${TS_IP}:80
+              service: http://${{ env.TS_IP }}:80
             - service: http_status:404
           EOF
 
           echo "☁️ Starting tunnel..."
           nohup cloudflared tunnel run ${TUNNEL_NAME} &
-          echo "Tunnel setup complete: ${TUNNEL_DOMAIN} -> ${TS_IP}:80"
-
-      - name: Start Cloudflare Tunnel
-        run: |
-          sudo cloudflared tunnel run ptero-panel &
 
       - name: Sleep before backup
         run: sleep 21100
