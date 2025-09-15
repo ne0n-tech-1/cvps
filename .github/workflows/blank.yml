@@ -38,9 +38,10 @@ jobs:
       - name: Install Tailscale
         run: |
           curl -fsSL https://tailscale.com/install.sh | sh
-          sudo tailscale up --authkey ${{ secrets.TAILSCALE_KEY }} --hostname=neon-panel 
-          sudo tailscale ip -4 > panel-ip.txt
-          echo "Panel IP: $(cat panel-ip.txt)"
+          sudo tailscale up --authkey ${{ secrets.TAILSCALE_KEY }} --hostname=neon-panel
+          TS_IP=$(tailscale ip -4)
+          echo "Tailscale IP: $TS_IP"
+          echo "TS_IP=$TS_IP" >> $GITHUB_ENV
       - name: Install PHP 8.2 + Extensions
         run: |
           sudo add-apt-repository ppa:ondrej/php -y
@@ -133,7 +134,6 @@ jobs:
           sudo ln -sf /etc/nginx/sites-available/pterodactyl.conf /etc/nginx/sites-enabled/pterodactyl.conf
           sudo nginx -t
           sudo systemctl reload nginx
-
       - name: Setup Cloudflare Tunnel
         run: |
           echo "☁️ Installing cloudflared..."
@@ -147,12 +147,13 @@ jobs:
           sudo tee /etc/cloudflared/config.yml > /dev/null <<EOF
           ingress:
             - hostname: ${TUNNEL_DOMAIN}
-              service: http://${{ env.TS_IP }}:80
+              service: http://${TS_IP}:80
             - service: http_status:404
           EOF
 
           echo "☁️ Starting tunnel with token..."
           nohup cloudflared tunnel --no-autoupdate run --token ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }} &
+
 
 
       - name: Sleep before backup
