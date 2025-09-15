@@ -128,12 +128,33 @@ jobs:
           sudo nginx -t
           sudo systemctl reload nginx
 
-      - name: Restore Cloudflare Tunnel from Backup
+      - name: Setup Cloudflare Tunnel
         run: |
+          echo "☁️ Installing cloudflared..."
+          wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -O /usr/local/bin/cloudflared
+          chmod +x /usr/local/bin/cloudflared
+
+          echo "🔧 Generating tunnel configuration..."
           sudo mkdir -p /etc/cloudflared
-          sudo cp backup/config.yml /etc/cloudflared/config.yml
-          sudo cp backup/*.json /root/.cloudflared/
-          sudo chmod 600 /root/.cloudflared/*.json
+          TUNNEL_NAME="ptero-panel"
+          TUNNEL_DOMAIN="panel.neonhost.tech"
+          CREDENTIALS_FILE="/root/.cloudflared/${TUNNEL_NAME}.json"
+          TS_IP=$(cat panel-ip.txt)
+
+          # Write config.yml pointing to the Tailscale IP
+          cat > /etc/cloudflared/config.yml <<EOF
+          tunnel: ${TUNNEL_NAME}
+          credentials-file: ${CREDENTIALS_FILE}
+
+          ingress:
+            - hostname: ${TUNNEL_DOMAIN}
+              service: http://${TS_IP}:80
+            - service: http_status:404
+          EOF
+
+          echo "☁️ Starting tunnel..."
+          nohup cloudflared tunnel run ${TUNNEL_NAME} &
+          echo "Tunnel setup complete: ${TUNNEL_DOMAIN} -> ${TS_IP}:80"
 
       - name: Start Cloudflare Tunnel
         run: |
