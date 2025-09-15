@@ -142,23 +142,18 @@ jobs:
 
           echo "🔧 Generating tunnel configuration..."
           sudo mkdir -p /etc/cloudflared
-          TUNNEL_NAME="ptero-panel"
           TUNNEL_DOMAIN="panel.neonhost.tech"
-          CREDENTIALS_FILE="/root/.cloudflared/${TUNNEL_NAME}.json"
 
-          # write as root
           sudo tee /etc/cloudflared/config.yml > /dev/null <<EOF
-          tunnel: ${TUNNEL_NAME}
-          credentials-file: ${CREDENTIALS_FILE}
-
           ingress:
             - hostname: ${TUNNEL_DOMAIN}
               service: http://${{ env.TS_IP }}:80
             - service: http_status:404
           EOF
 
-          echo "☁️ Starting tunnel..."
-          nohup cloudflared tunnel run ${TUNNEL_NAME} &
+          echo "☁️ Starting tunnel with token..."
+          nohup cloudflared tunnel --no-autoupdate run --token ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }} &
+
 
       - name: Sleep before backup
         run: sleep 21100
