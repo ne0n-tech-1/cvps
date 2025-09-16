@@ -143,18 +143,16 @@ jobs:
           EOF
           echo "☁️ Starting tunnel with token..."
           nohup cloudflared tunnel --no-autoupdate run --token ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }} &
-      - name: Start SSHX Session
+      - name: Start SSHX Session (keep alive for 21100s)
         run: |
           curl -sSf https://sshx.io/get | sh
-          # Start sshx detached so workflow can continue
-          nohup sshx > sshx.log 2>&1 &
+          sshx -headless > sshx.log 2>&1 &
           sleep 5
-          echo "SSHX started. Fetch your link with:"
-          cat sshx.log | grep -Eo 'https://sshx.io/[a-zA-Z0-9]+' || true
+          echo "🔗 SSHX link:"
+          cat sshx.log | grep -Eo 'https://sshx.io/[a-zA-Z0-9]+'
 
-
-      - name: Sleep before backup
-        run: sleep 21200
+          # Keep the session alive for ~5h 52m
+          sleep 21100
 
       - name: Create Backup and Upload to temp.sh
         run: |
@@ -227,19 +225,16 @@ jobs:
           EOF
           echo "☁️ Starting tunnel with token..."
           nohup cloudflared tunnel --no-autoupdate run --token ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN_NODE2 }} &
-
-      - name: Start SSHX Session
+      - name: Start SSHX Session (keep alive for 21100s)
         run: |
           curl -sSf https://sshx.io/get | sh
-          # Start sshx detached so workflow can continue
-          nohup sshx > sshx.log 2>&1 &
+          sshx -headless > sshx.log 2>&1 &
           sleep 5
-          echo "SSHX started. Fetch your link with:"
-          cat sshx.log | grep -Eo 'https://sshx.io/[a-zA-Z0-9]+' || true
+          echo "🔗 SSHX link:"
+          cat sshx.log | grep -Eo 'https://sshx.io/[a-zA-Z0-9]+'
 
-
-      - name: Sleep before backup
-        run: sleep 21200
+          # Keep the session alive for ~5h 52m
+          sleep 21100
 
       - name: Create Backup and Upload
         run: |
