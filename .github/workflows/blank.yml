@@ -149,7 +149,10 @@ jobs:
 
       - name: Create Backup and Upload to temp.sh
         run: |
+          echo "🧹 Cleaning old backups..."
+          rm -rf backup
           mkdir -p backup
+
           BACKUP_NAME="latest-backup.tar.gz"
           echo "📦 Creating backup..."
           sudo tar --ignore-failed-read \
@@ -171,6 +174,11 @@ jobs:
           for f in backup/${BACKUP_NAME}.part-*; do
             if [ -s "$f" ]; then
               URL=$(curl -s -T "$f" https://temp.sh)
+              echo "$URL" | tee -a backup/latest-backup-urls.txt
+            else
+              echo "⚠️ Skipping empty part: $f"
+            fi
+          done
               echo "$URL" | tee -a backup/latest-backup-urls.txt
             else
               echo "⚠️ Skipping empty part: $f"
