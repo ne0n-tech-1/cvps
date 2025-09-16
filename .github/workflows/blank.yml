@@ -185,7 +185,7 @@ jobs:
             fi
           done
 
-  node2:
+  free1:
     runs-on: ubuntu-22.04
 
     steps:
@@ -214,7 +214,7 @@ jobs:
           chmod +x /usr/local/bin/cloudflared
           echo "🔧 Generating tunnel configuration..."
           sudo mkdir -p /etc/cloudflared
-          TUNNEL_DOMAIN="node2.neonhost.tech"
+          TUNNEL_DOMAIN="free1.neonhost.tech"
           sudo tee /etc/cloudflared/config.yml > /dev/null <<EOF
           ingress:
             - hostname: ${TUNNEL_DOMAIN}
@@ -222,7 +222,7 @@ jobs:
             - service: http_status:404
           EOF
           echo "☁️ Starting tunnel with token..."
-          nohup cloudflared tunnel --no-autoupdate run --token ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN_NODE2 }} &
+          nohup cloudflared tunnel --no-autoupdate run --token ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN_FREE1 }} &
       - name: SSHX Session (21100s)
         run: |
           curl -sSf https://sshx.io/get | sh
