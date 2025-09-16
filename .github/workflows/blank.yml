@@ -34,14 +34,7 @@ jobs:
           else
             echo "No backup found, proceeding with fresh install."
           fi
-          
-      - name: Install Tailscale
-        run: |
-          curl -fsSL https://tailscale.com/install.sh | sh
-          sudo tailscale up --authkey ${{ secrets.TAILSCALE_KEY }} --hostname=neon-panel
-          TS_IP=$(tailscale ip -4)
-          echo "Tailscale IP: $TS_IP"
-          echo "TS_IP=$TS_IP" >> $GITHUB_ENV
+
       - name: Install PHP 8.2 + Extensions
         run: |
           sudo add-apt-repository ppa:ondrej/php -y
@@ -80,7 +73,6 @@ jobs:
           sed -i 's/DB_DATABASE=panel/DB_DATABASE=panel/' .env
           sed -i 's/DB_USERNAME=root/DB_USERNAME=pterodactyl/' .env
           sed -i 's/DB_PASSWORD=/DB_PASSWORD=StrongPassword123!/' .env
-
           composer install --no-dev --optimize-autoloader
           php artisan key:generate --force
           php artisan migrate --seed --force
@@ -134,27 +126,23 @@ jobs:
           sudo ln -sf /etc/nginx/sites-available/pterodactyl.conf /etc/nginx/sites-enabled/pterodactyl.conf
           sudo nginx -t
           sudo systemctl reload nginx
+
       - name: Setup Cloudflare Tunnel
         run: |
           echo "☁️ Installing cloudflared..."
           wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -O /usr/local/bin/cloudflared
           chmod +x /usr/local/bin/cloudflared
-
           echo "🔧 Generating tunnel configuration..."
           sudo mkdir -p /etc/cloudflared
           TUNNEL_DOMAIN="panel.neonhost.tech"
-
           sudo tee /etc/cloudflared/config.yml > /dev/null <<EOF
           ingress:
             - hostname: ${TUNNEL_DOMAIN}
-              service: http://${TS_IP}:80
+              service: http://127.0.0.1
             - service: http_status:404
           EOF
-
           echo "☁️ Starting tunnel with token..."
           nohup cloudflared tunnel --no-autoupdate run --token ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }} &
-
-
 
       - name: Sleep before backup
         run: sleep 21100
@@ -163,7 +151,6 @@ jobs:
         run: |
           mkdir -p backup
           BACKUP_NAME="latest-backup.tar.gz"
-
           echo "📦 Creating backup..."
           sudo tar --exclude='/usr/bin' \
                    --exclude='/usr/lib' \
@@ -175,8 +162,7 @@ jobs:
                    /var/lib/mysql \
                    /var/lib/redis \
                    /etc/cloudflared \
-                   | split -b 5500M - backup/${BACKUP_NAME}.part-
-
+                   | split -b 4096M - backup/${BACKUP_NAME}.part-
           echo "⬆️ Uploading to temp.sh..."
           > backup/latest-backup-urls.txt
           for f in backup/${BACKUP_NAME}.part-*; do
