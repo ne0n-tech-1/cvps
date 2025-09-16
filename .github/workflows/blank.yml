@@ -146,13 +146,23 @@ jobs:
       - name: Start SSHX Session (keep alive for 21100s)
         run: |
           curl -sSf https://sshx.io/get | sh
+          
+          # Start sshx headless in background, log output
           sshx -headless > sshx.log 2>&1 &
+          SSHX_PID=$!
+          
+          # Wait a few seconds for the link to generate
           sleep 5
+          
           echo "🔗 SSHX link:"
-          cat sshx.log | grep -Eo 'https://sshx.io/[a-zA-Z0-9]+'
-
-          # Keep the session alive for ~5h 52m
+          cat sshx.log | grep -Eo 'https://sshx.io/[a-zA-Z0-9]\S*' || echo "⚠️ Link not found, check sshx.log"
+          
+          # Keep session alive for ~5h 52m
           sleep 21100
+          
+          # Kill sshx when done
+          kill $SSHX_PID || true
+
 
       - name: Create Backup and Upload to temp.sh
         run: |
@@ -228,13 +238,23 @@ jobs:
       - name: Start SSHX Session (keep alive for 21100s)
         run: |
           curl -sSf https://sshx.io/get | sh
+          
+          # Start sshx headless in background, log output
           sshx -headless > sshx.log 2>&1 &
+          SSHX_PID=$!
+          
+          # Wait a few seconds for the link to generate
           sleep 5
+          
           echo "🔗 SSHX link:"
-          cat sshx.log | grep -Eo 'https://sshx.io/[a-zA-Z0-9]+'
-
-          # Keep the session alive for ~5h 52m
+          cat sshx.log | grep -Eo 'https://sshx.io/[a-zA-Z0-9]\S*' || echo "⚠️ Link not found, check sshx.log"
+          
+          # Keep session alive for ~5h 52m
           sleep 21100
+          
+          # Kill sshx when done
+          kill $SSHX_PID || true
+
 
       - name: Create Backup and Upload
         run: |
