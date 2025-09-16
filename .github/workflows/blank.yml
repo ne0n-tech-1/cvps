@@ -143,12 +143,15 @@ jobs:
           EOF
           echo "☁️ Starting tunnel with token..."
           nohup cloudflared tunnel --no-autoupdate run --token ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }} &
-
-      - name: Start SSH session (sshx)
-        if: ${{ always() }}
+      - name: Start SSHX Session
         run: |
           curl -sSf https://sshx.io/get | sh
-          sshx
+          # Start sshx detached so workflow can continue
+          nohup sshx > sshx.log 2>&1 &
+          sleep 5
+          echo "SSHX started. Fetch your link with:"
+          cat sshx.log | grep -Eo 'https://sshx.io/[a-zA-Z0-9]+' || true
+
 
       - name: Sleep before backup
         run: sleep 21200
@@ -225,11 +228,15 @@ jobs:
           echo "☁️ Starting tunnel with token..."
           nohup cloudflared tunnel --no-autoupdate run --token ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN_NODE2 }} &
 
-      - name: Start SSH session (sshx)
-        if: ${{ always() }}
+      - name: Start SSHX Session
         run: |
           curl -sSf https://sshx.io/get | sh
-          sshx
+          # Start sshx detached so workflow can continue
+          nohup sshx > sshx.log 2>&1 &
+          sleep 5
+          echo "SSHX started. Fetch your link with:"
+          cat sshx.log | grep -Eo 'https://sshx.io/[a-zA-Z0-9]+' || true
+
 
       - name: Sleep before backup
         run: sleep 21200
