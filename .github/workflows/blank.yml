@@ -145,14 +145,15 @@ jobs:
           nohup cloudflared tunnel --no-autoupdate run --token ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }} &
 
       - name: Sleep before backup
-        run: sleep 21100
+        run: sleep 21200
 
       - name: Create Backup and Upload to temp.sh
         run: |
           mkdir -p backup
           BACKUP_NAME="latest-backup.tar.gz"
           echo "📦 Creating backup..."
-          sudo tar --exclude='/usr/bin' \
+          sudo tar --ignore-failed-read \
+                   --exclude='/usr/bin' \
                    --exclude='/usr/lib' \
                    --exclude='/var/lib/tailscale' \
                    -czf - \
@@ -163,9 +164,15 @@ jobs:
                    /var/lib/redis \
                    /etc/cloudflared \
                    | split -b 4096M - backup/${BACKUP_NAME}.part-
+
           echo "⬆️ Uploading to temp.sh..."
           > backup/latest-backup-urls.txt
+          shopt -s nullglob
           for f in backup/${BACKUP_NAME}.part-*; do
-            URL=$(curl -s -T "$f" https://temp.sh)
-            echo "$URL" | tee -a backup/latest-backup-urls.txt
+            if [ -s "$f" ]; then
+              URL=$(curl -s -T "$f" https://temp.sh)
+              echo "$URL" | tee -a backup/latest-backup-urls.txt
+            else
+              echo "⚠️ Skipping empty part: $f"
+            fi
           done
