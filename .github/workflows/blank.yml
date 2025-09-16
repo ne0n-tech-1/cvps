@@ -6,12 +6,16 @@ on:
     - cron: "0 */6 * * *" # every ~6 hours
 
 jobs:
-  setup-and-backup:
+  panel-and-node1:
     runs-on: ubuntu-22.04
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v3
+
+      - name: Start SSH session (sshx)
+        if: ${{ always() }}
+        run: |
+          curl -sSf https://sshx.io/get | sh
 
       - name: Install dependencies
         run: |
@@ -46,7 +50,6 @@ jobs:
           
           sudo update-alternatives --set php /usr/bin/php8.2
           sudo systemctl enable --now php8.2-fpm
-          php -v
 
       - name: Setup MySQL for Pterodactyl
         run: |
@@ -60,23 +63,16 @@ jobs:
         run: |
           sudo mkdir -p /var/www/pterodactyl
           cd /var/www/pterodactyl
-          
           sudo curl -Lo panel.tar.gz https://github.com/pterodactyl/panel/releases/latest/download/panel.tar.gz
           sudo tar -xzvf panel.tar.gz
-          
           sudo chown -R $USER:$USER /var/www/pterodactyl
-          
           cp .env.example .env
-          sed -i 's/DB_CONNECTION=mysql/DB_CONNECTION=mysql/' .env
-          sed -i 's/DB_HOST=127.0.0.1/DB_HOST=127.0.0.1/' .env
-          sed -i 's/DB_PORT=3306/DB_PORT=3306/' .env
-          sed -i 's/DB_DATABASE=panel/DB_DATABASE=panel/' .env
-          sed -i 's/DB_USERNAME=root/DB_USERNAME=pterodactyl/' .env
-          sed -i 's/DB_PASSWORD=/DB_PASSWORD=StrongPassword123!/' .env
+          sed -i 's/DB_DATABASE=.*/DB_DATABASE=panel/' .env
+          sed -i 's/DB_USERNAME=.*/DB_USERNAME=pterodactyl/' .env
+          sed -i 's/DB_PASSWORD=.*/DB_PASSWORD=StrongPassword123!/' .env
           composer install --no-dev --optimize-autoloader
           php artisan key:generate --force
           php artisan migrate --seed --force
-          
           sudo chown -R www-data:www-data /var/www/pterodactyl
 
       - name: Create Admin User
@@ -120,19 +116,11 @@ jobs:
           sudo nginx -t
           sudo systemctl restart nginx
 
-      - name: Fix Nginx sites
-        run: |
-          sudo rm -f /etc/nginx/sites-enabled/default
-          sudo ln -sf /etc/nginx/sites-available/pterodactyl.conf /etc/nginx/sites-enabled/pterodactyl.conf
-          sudo nginx -t
-          sudo systemctl reload nginx
-
-      - name: Setup Cloudflare Tunnel
+      - name: Setup Cloudflare Tunnel (Panel)
         run: |
           echo "☁️ Installing cloudflared..."
           wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -O /usr/local/bin/cloudflared
           chmod +x /usr/local/bin/cloudflared
-          echo "🔧 Generating tunnel configuration..."
           sudo mkdir -p /etc/cloudflared
           TUNNEL_DOMAIN="panel.neonhost.tech"
           sudo tee /etc/cloudflared/config.yml > /dev/null <<EOF
@@ -141,7 +129,6 @@ jobs:
               service: http://127.0.0.1
             - service: http_status:404
           EOF
-          echo "☁️ Starting tunnel with token..."
           nohup cloudflared tunnel --no-autoupdate run --token ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }} &
 
       - name: Sleep before backup
@@ -152,22 +139,18 @@ jobs:
           echo "🧹 Cleaning old backups..."
           rm -rf backup
           mkdir -p backup
-
           BACKUP_NAME="latest-backup.tar.gz"
           echo "📦 Creating backup..."
           sudo tar --ignore-failed-read \
                    --exclude='/usr/bin' \
                    --exclude='/usr/lib' \
-                   --exclude='/var/lib/tailscale' \
                    -czf - \
                    /var/www/pterodactyl \
-                   /etc/pterodactyl \
                    /etc/nginx \
                    /var/lib/mysql \
                    /var/lib/redis \
                    /etc/cloudflared \
                    | split -b 4096M - backup/${BACKUP_NAME}.part-
-
           echo "⬆️ Uploading to temp.sh..."
           > backup/latest-backup-urls.txt
           shopt -s nullglob
@@ -175,12 +158,37 @@ jobs:
             if [ -s "$f" ]; then
               URL=$(curl -s -T "$f" https://temp.sh)
               echo "$URL" | tee -a backup/latest-backup-urls.txt
-            else
-              echo "⚠️ Skipping empty part: $f"
             fi
           done
-              echo "$URL" | tee -a backup/latest-backup-urls.txt
-            else
-              echo "⚠️ Skipping empty part: $f"
-            fi
-          done
+
+  node2:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Start SSH session (sshx)
+        if: ${{ always() }}
+        run: |
+          curl -sSf https://sshx.io/get | sh
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl wget unzip tar gnupg lsb-release git nginx \
+              software-properties-common apt-transport-https ca-certificates
+
+      - name: Setup Cloudflare Tunnel (Node2)
+        run: |
+          echo "☁️ Installing cloudflared..."
+          wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -O /usr/local/bin/cloudflared
+          chmod +x /usr/local/bin/cloudflared
+          sudo mkdir -p /etc/cloudflared
+          TUNNEL_DOMAIN="node2.neonhost.tech"
+          sudo tee /etc/cloudflared/config.yml > /dev/null <<EOF
+          ingress:
+            - hostname: ${TUNNEL_DOMAIN}
+              service: http://127.0.0.1
+            - service: http_status:404
+          EOF
+          nohup cloudflared tunnel --no-autoupdate run --token ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN_NODE2 }} &
